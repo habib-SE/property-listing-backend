@@ -1,9 +1,20 @@
 const db = require('../config/db');
 
-// Cities
+// Cities — search-as-you-type (prefix match, uses idx_cities_city index, max 20 results)
 exports.getCities = async (req, res) => {
     try {
-        const cities = await db('cities').where({ status: 1 }).orderBy('city_name', 'asc');
+        const { search } = req.query;
+
+        if (!search || search.trim().length < 2) {
+            return res.json({ success: true, cities: [] });
+        }
+
+        const term = `${search.trim()}%`;  // prefix-only — index is used, no full scan
+        const cities = await db('cities')
+            .where('city', 'like', term)
+            .orderBy('city', 'asc')
+            .limit(20);
+
         res.json({ success: true, cities });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });

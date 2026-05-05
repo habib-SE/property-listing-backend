@@ -3,8 +3,18 @@ const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
 const routes = require('./routes');
+const db = require('./config/db');
 
 const app = express();
+
+// Automatic migration for 'phone' column
+db.schema.hasColumn('users_seller', 'phone').then(exists => {
+    if (!exists) {
+        return db.schema.table('users_seller', table => {
+            table.string('phone', 50).nullable().after('email');
+        }).then(() => console.log('Migration: Added phone column to users_seller'));
+    }
+}).catch(err => console.error('Migration error:', err));
 
 // Middlewares
 app.use(helmet());
@@ -16,6 +26,7 @@ app.use(express.urlencoded({ extended: true }));
 app.use('/uploads', express.static('uploads'));
 
 // Routes
+app.get('/health', (req, res) => res.json({ status: 'ok' }));
 app.use('/api', routes);
 
 // Error handling middleware

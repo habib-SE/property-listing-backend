@@ -4,13 +4,33 @@
 -- ============================================================
 
 -- ---------- cities ----------
-CREATE TABLE cities (
-    id              SERIAL PRIMARY KEY,
-    city_name       VARCHAR(150) NOT NULL,
-    country         VARCHAR(150),
-    status          SMALLINT NOT NULL DEFAULT 1,
-    date_added      TIMESTAMP NOT NULL DEFAULT NOW()
-);
+CREATE TABLE `cities` (
+  `id` INT UNSIGNED NOT NULL,
+  `city` VARCHAR(100) NOT NULL,
+  `county` VARCHAR(100) DEFAULT NULL,
+  `state` VARCHAR(100) DEFAULT NULL,
+  `county_fips` VARCHAR(10) DEFAULT NULL,
+  `state_fips` VARCHAR(10) DEFAULT NULL,
+  `time_zone` DECIMAL(5,2) DEFAULT NULL,
+  `daylight_savings` CHAR(1) DEFAULT NULL,
+  `zip_latitude` DECIMAL(20,15) DEFAULT NULL,
+  `zip_longitude` DECIMAL(20,15) DEFAULT NULL,
+  `created_at` DATETIME(6) DEFAULT NULL,
+  `updated_at` DATETIME(6) DEFAULT NULL,
+  `alternate_names` TEXT DEFAULT NULL,
+  `country_id` INT UNSIGNED DEFAULT NULL,
+  `admin1_code` INT UNSIGNED DEFAULT NULL,
+  `admin2_code` INT UNSIGNED DEFAULT NULL,
+  `admin3_code` INT UNSIGNED DEFAULT NULL,
+  `population` INT UNSIGNED DEFAULT NULL,
+
+  PRIMARY KEY (`id`),
+  INDEX `idx_cities_city` (`city`),
+  INDEX `idx_cities_state` (`state`),
+  INDEX `idx_cities_country_id` (`country_id`),
+  INDEX `idx_cities_city_state` (`city`, `state`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 
 -- ---------- developers ----------
 CREATE TABLE developers (
@@ -55,6 +75,7 @@ CREATE TABLE users_seller (
     first_name        VARCHAR(150) NOT NULL,
     last_name         VARCHAR(150) NOT NULL,
     email             VARCHAR(255) UNIQUE NOT NULL,
+    phone             VARCHAR(50),
     password          VARCHAR(255) NOT NULL,
     private_or_agency VARCHAR(20) NOT NULL DEFAULT 'private',  -- 'private' | 'agency'
     status            SMALLINT NOT NULL DEFAULT 1,
