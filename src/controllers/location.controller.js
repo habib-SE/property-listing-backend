@@ -24,7 +24,14 @@ exports.getCities = async (req, res) => {
 // Developers
 exports.getDevelopers = async (req, res) => {
     try {
-        const developers = await db('developers').where({ status: 1 }).orderBy('developer_name', 'asc');
+        const { search } = req.query;
+        const query = db('developers').where({ status: 1 });
+
+        if (search) {
+            query.where('developer_name', 'like', `%${search}%`);
+        }
+
+        const developers = await query.orderBy('developer_name', 'asc').limit(20);
         res.json({ success: true, developers });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
@@ -34,14 +41,27 @@ exports.getDevelopers = async (req, res) => {
 // Communities
 exports.getCommunities = async (req, res) => {
     try {
-        const { city_id, developer_id } = req.query;
+        const { city_id, developer_id, search } = req.query;
         const query = db('communities').where({ status: 1 });
 
         if (city_id) query.where({ city_id });
         if (developer_id) query.where({ developer_id });
+        if (search) {
+            query.where('community_name', 'like', `%${search}%`);
+        }
 
-        const communities = await query.orderBy('community_name', 'asc');
+        const communities = await query.orderBy('community_name', 'asc').limit(20);
         res.json({ success: true, communities });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+// Property Types
+exports.getPropertyTypes = async (req, res) => {
+    try {
+        const types = await db('property_types').where({ status: 1 }).orderBy('type_name', 'asc');
+        res.json({ success: true, types });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
     }

@@ -12,5 +12,6 @@ router.get('/profile-data', authenticateToken, (req, res, next) => {
 router.get('/me', authenticateToken, authController.getMe);
 router.put('/update-profile', authenticateToken, authController.updateProfile);
 router.put('/update-password', authenticateToken, authController.updatePassword);
+router.get('/all-sellers', authenticateToken, authController.getAllUserSellar);
 
 module.exports = router;

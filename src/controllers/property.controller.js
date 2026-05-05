@@ -23,13 +23,24 @@ const getProperties = async (req, res) => {
         if (max_price) query.where('price', '<=', max_price);
         if (search) {
             query.where(function () {
-                this.where('address', 'like', `%${search}%`)
+                this.where('listing_title', 'like', `%${search}%`)
+                    .orWhere('address', 'like', `%${search}%`)
                     .orWhere('description', 'like', `%${search}%`)
                     .orWhere('community_name', 'like', `%${search}%`);
             });
         }
 
-        const properties = await query.orderBy('date_added', 'desc');
+        const properties = await query
+            .leftJoin('developers', 'properties.developer_id', 'developers.id')
+            .leftJoin('communities', 'properties.community_id', 'communities.id')
+            .leftJoin('cities', 'properties.city_id', 'cities.id')
+            .select(
+                'properties.*',
+                'developers.developer_name',
+                'communities.community_name as community_ref_name',
+                'cities.city as city_name'
+            )
+            .orderBy('properties.date_added', 'desc');
 
         // Fetch primary image for each property
         for (let prop of properties) {
@@ -76,7 +87,72 @@ const getPropertyById = async (req, res) => {
 // Create property (Protected)
 const createProperty = async (req, res) => {
     try {
-        const propertyData = { ...req.body, seller_id: req.user.id };
+        console.log(req.body);
+        let sellerId = req.user.id;
+
+        // If admin is assigning to a specific vendor
+        if (req.user.role === 'admin' && req.body.assigned_vendor_id) {
+            sellerId = req.body.assigned_vendor_id;
+        }
+
+        const propertyData = { ...req.body, seller_id: sellerId };
+
+        // Fetch city_id from seller's agency
+        const userAgency = await db('user_agency')
+            .where({ user_id: sellerId, status: 1 })
+            .first();
+        
+        let agencyCityId = null;
+        if (userAgency) {
+            const agency = await db('agencies')
+                .where({ id: userAgency.agency_id })
+                .select('city_id')
+                .first();
+            if (agency) {
+                agencyCityId = agency.city_id;
+            }
+        }
+
+        // Apply agency city_id to property if not already set
+        if (!propertyData.city_id && agencyCityId) {
+            propertyData.city_id = agencyCityId;
+        }
+
+        // Handle Developer creation/lookup
+        if (!propertyData.developer_id && propertyData.builder) {
+            const existingDev = await db('developers')
+                .where({ developer_name: propertyData.builder })
+                .first();
+            if (existingDev) {
+                propertyData.developer_id = existingDev.id;
+            } else {
+                const [newDevId] = await db('developers').insert({
+                    developer_name: propertyData.builder
+                });
+                propertyData.developer_id = newDevId;
+            }
+        }
+
+        // Handle Community creation/lookup
+        if (!propertyData.community_id && propertyData.community_name) {
+            const existingCom = await db('communities')
+                .where({ community_name: propertyData.community_name })
+                .first();
+            if (existingCom) {
+                propertyData.community_id = existingCom.id;
+            } else {
+                const [newComId] = await db('communities').insert({
+                    community_name: propertyData.community_name,
+                    subcommunity_name: propertyData.subcommunity_name,
+                    city_id: propertyData.city_id || agencyCityId || null,
+                    developer_id: propertyData.developer_id || null
+                });
+                propertyData.community_id = newComId;
+            }
+        }
+
+        // Remove the extra field if it's not a column in the database
+        delete propertyData.assigned_vendor_id;
 
         // Remove images from body if present, they are handled separately
         delete propertyData.images;

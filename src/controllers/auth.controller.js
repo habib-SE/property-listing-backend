@@ -273,11 +273,51 @@ const getProfileData = async (req, res) => {
     }
 };
 
+const getAllUserSellar = async (req, res) => {
+    try {
+        const users = await db('users_seller as u')
+            .leftJoin('user_agency as ua', 'u.id', 'ua.user_id')
+            .leftJoin('agencies as a', 'ua.agency_id', 'a.id')
+            .leftJoin('cities as c', 'a.city_id', 'c.id')
+            .select(
+                'u.id',
+                'u.first_name',
+                'u.last_name',
+                'u.email',
+                'u.phone',
+                'u.private_or_agency',
+                'u.role',
+                'u.status',
+                'u.created_at',
+                'a.agency_name',
+                'a.address as agency_address',
+                'a.city_id as agency_city_id',
+                'c.city as city_name',
+                'c.state as city_state'
+            );
+
+        // Format city labels for each user
+        const formattedUsers = users.map(user => {
+            if (user.city_name) {
+                user.agency_city_label = user.city_state
+                    ? `${user.city_name}, ${user.city_state}`
+                    : user.city_name;
+            }
+            return user;
+        });
+
+        res.json({ success: true, users: formattedUsers });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
 module.exports = {
     register,
     login,
     getMe,
     getProfileData,
     updateProfile,
-    updatePassword
+    updatePassword,
+    getAllUserSellar
 };
