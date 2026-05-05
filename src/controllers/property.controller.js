@@ -13,42 +13,87 @@ const getProperties = async (req, res) => {
             search
         } = req.query;
 
-        const query = db('properties').where({ status: 1 });
+        const query = db('properties').where({ 'properties.status': 1 });
 
-        if (city_id) query.where({ city_id });
-        if (property_status) query.where({ property_status });
-        if (property_type) query.where({ property_type });
-        if (bedrooms) query.where({ bedrooms });
-        if (min_price) query.where('price', '>=', min_price);
-        if (max_price) query.where('price', '<=', max_price);
+        if (city_id) query.where({ 'properties.city_id': city_id });
+        if (property_status) query.where({ 'properties.property_status': property_status });
+        if (property_type) query.where({ 'properties.property_type': property_type });
+        if (bedrooms) query.where({ 'properties.bedrooms': bedrooms });
+        if (min_price) query.where('properties.price', '>=', min_price);
+        if (max_price) query.where('properties.price', '<=', max_price);
         if (search) {
             query.where(function () {
-                this.where('listing_title', 'like', `%${search}%`)
-                    .orWhere('address', 'like', `%${search}%`)
-                    .orWhere('description', 'like', `%${search}%`)
-                    .orWhere('community_name', 'like', `%${search}%`);
+                this.where('properties.listing_title', 'like', `%${search}%`)
+                    .orWhere('properties.address', 'like', `%${search}%`)
+                    .orWhere('properties.description', 'like', `%${search}%`)
+                    .orWhere('properties.community_name', 'like', `%${search}%`);
             });
         }
 
-        const properties = await query
+        const rows = await query
             .leftJoin('developers', 'properties.developer_id', 'developers.id')
             .leftJoin('communities', 'properties.community_id', 'communities.id')
             .leftJoin('cities', 'properties.city_id', 'cities.id')
             .select(
                 'properties.*',
-                'developers.developer_name',
-                'communities.community_name as community_ref_name',
-                'cities.city as city_name'
+                'developers.developer_name as dev_name',
+                'communities.community_name as comm_name',
+                'cities.city as cty_name'
             )
             .orderBy('properties.date_added', 'desc');
 
-        // Fetch primary image for each property
-        for (let prop of properties) {
+        const properties = [];
+
+        for (let row of rows) {
+            const prop = { ...row };
+
+            // Cleanup joined summary fields
+            delete prop.dev_name;
+            delete prop.comm_name;
+            delete prop.cty_name;
+
+            // Fetch full related objects
+            if (prop.developer_id) {
+                prop.developer = await db('developers').where({ id: prop.developer_id }).first();
+            }
+            if (prop.community_id) {
+                prop.community = await db('communities').where({ id: prop.community_id }).first();
+            }
+            if (prop.city_id) {
+                prop.city = await db('cities').where({ id: prop.city_id }).first();
+            }
+            if (prop.property_type_id) {
+                prop.property_type_obj = await db('property_types').where({ id: prop.property_type_id }).first();
+            }
+
+            // Fetch primary image
             const primaryImage = await db('property_images')
                 .where({ property_id: prop.id })
                 .orderBy('sort_order', 'asc')
                 .first();
-            prop.primary_image = primaryImage ? primaryImage.image_url : null;
+            prop.primary_image = primaryImage 
+                ? `${process.env.BASE_URL || 'http://localhost:5000'}${primaryImage.image_url}` 
+                : null;
+
+            // Fetch seller & agency info
+            const seller = await db('users_seller')
+                .where({ id: prop.seller_id })
+                .select('id', 'first_name', 'last_name', 'email', 'phone', 'private_or_agency')
+                .first();
+            
+            if (seller) {
+                const agencyLink = await db('user_agency')
+                    .where({ user_id: seller.id, status: 1 })
+                    .first();
+                if (agencyLink) {
+                    seller.agency = await db('agencies')
+                        .where({ id: agencyLink.agency_id })
+                        .first();
+                }
+            }
+            prop.seller = seller;
+
+            properties.push(prop);
         }
 
         res.json({ success: true, properties });
@@ -69,12 +114,46 @@ const getPropertyById = async (req, res) => {
             .where({ property_id: property.id })
             .orderBy('sort_order', 'asc');
 
-        property.images = images;
+        property.images = images.map(img => ({
+            ...img,
+            image_url: `${process.env.BASE_URL || 'http://localhost:5000'}${img.image_url}`
+        }));
 
+        // Fetch related objects
+        if (property.developer_id) {
+            property.developer = await db('developers').where({ id: property.developer_id }).first();
+        }
+
+        if (property.city_id) {
+            property.city = await db('cities').where({ id: property.city_id }).first();
+        }
+
+        if (property.community_id) {
+            property.community = await db('communities').where({ id: property.community_id }).first();
+        }
+
+        if (property.property_type_id) {
+            property.property_type_obj = await db('property_types').where({ id: property.property_type_id }).first();
+        }
+
+        // Fetch seller with agency info
         const seller = await db('users_seller')
             .where({ id: property.seller_id })
-            .select('id', 'first_name', 'last_name', 'email', 'private_or_agency')
+            .select('id', 'first_name', 'last_name', 'email', 'phone', 'private_or_agency')
             .first();
+
+        if (seller) {
+            // Fetch agency if associated
+            const agencyLink = await db('user_agency')
+                .where({ user_id: seller.id, status: 1 })
+                .first();
+            
+            if (agencyLink) {
+                seller.agency = await db('agencies')
+                    .where({ id: agencyLink.agency_id })
+                    .first();
+            }
+        }
 
         property.seller = seller;
 

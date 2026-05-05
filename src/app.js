@@ -17,13 +17,22 @@ db.schema.hasColumn('users_seller', 'phone').then(exists => {
 }).catch(err => console.error('Migration error:', err));
 
 // Middlewares
-app.use(helmet());
+app.use(helmet({
+    crossOriginResourcePolicy: false,
+    contentSecurityPolicy: false,
+    crossOriginOpenerPolicy: false,
+}));
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 // Serve static files
-app.use('/uploads', express.static('uploads'));
+// Serve static files with CORS headers
+app.use('/uploads', express.static('uploads', {
+    setHeaders: (res) => {
+        res.set('Access-Control-Allow-Origin', '*');
+    }
+}));
 
 // Routes
 app.get('/health', (req, res) => res.json({ status: 'ok' }));
