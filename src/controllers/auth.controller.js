@@ -8,6 +8,7 @@ const register = async (req, res) => {
         const { first_name, last_name, email, password, private_or_agency, agency_id, agency_name, city_id, phone } = req.body;
 
         const role = private_or_agency || 'private';
+        const userRole = 'vendor';
 
         const existing = await db('users_seller').where({ email }).first();
         if (existing) {
@@ -23,10 +24,11 @@ const register = async (req, res) => {
             last_name,
             email: email.toLowerCase(),
             password: hashedPassword,
+            role: userRole,
             private_or_agency: role,
             phone: phone || null
         });
-        
+
         const userId = insertResults[0];
 
         if (role === 'agency') {
@@ -100,7 +102,7 @@ const login = async (req, res) => {
             return res.status(400).json({ success: false, message: 'Invalid credentials' });
         }
 
-        const token = jwt.sign({ id: user.id, email: user.email, first_name: user.first_name }, process.env.JWT_SECRET, { expiresIn: '24h' });
+        const token = jwt.sign({ id: user.id, email: user.email, first_name: user.first_name, role: user.role }, process.env.JWT_SECRET, { expiresIn: '24h' });
         res.status(200).json({
             success: true,
             message: 'Login successful',
@@ -110,6 +112,7 @@ const login = async (req, res) => {
                 email: user.email,
                 first_name: user.first_name,
                 last_name: user.last_name,
+                role: user.role,
                 private_or_agency: user.private_or_agency
             }
         });
@@ -132,8 +135,8 @@ const getMe = async (req, res) => {
             if (link) {
                 const agency = await db('agencies').where({ id: link.agency_id }).first();
                 if (agency) {
-                    user.agency_id      = agency.id;
-                    user.agency_name    = agency.agency_name;
+                    user.agency_id = agency.id;
+                    user.agency_name = agency.agency_name;
                     user.agency_address = agency.address;
                     user.agency_city_id = agency.city_id;
 
@@ -163,8 +166,8 @@ const updateProfile = async (req, res) => {
 
         await db('users_seller')
             .where({ id: userId })
-            .update({ 
-                first_name, 
+            .update({
+                first_name,
                 last_name,
                 phone: phone || null
             });
@@ -175,9 +178,9 @@ const updateProfile = async (req, res) => {
             const link = await db('user_agency').where({ user_id: userId }).first();
             if (link) {
                 const agencyUpdate = {};
-                if (agency_name    !== undefined) agencyUpdate.agency_name = agency_name;
-                if (agency_address !== undefined) agencyUpdate.address     = agency_address;
-                if (agency_city_id !== undefined) agencyUpdate.city_id     = agency_city_id;
+                if (agency_name !== undefined) agencyUpdate.agency_name = agency_name;
+                if (agency_address !== undefined) agencyUpdate.address = agency_address;
+                if (agency_city_id !== undefined) agencyUpdate.city_id = agency_city_id;
 
                 if (Object.keys(agencyUpdate).length > 0) {
                     await db('agencies').where({ id: link.agency_id }).update(agencyUpdate);
@@ -232,7 +235,7 @@ const updatePassword = async (req, res) => {
 const getProfileData = async (req, res) => {
     try {
         const userId = req.user.id;
-        
+
         const user = await db('users_seller as u')
             .leftJoin('user_agency as ua', 'u.id', 'ua.user_id')
             .leftJoin('agencies as a', 'ua.agency_id', 'a.id')
@@ -259,8 +262,8 @@ const getProfileData = async (req, res) => {
 
         // Format city label for the frontend
         if (user.city_name) {
-            user.agency_city_label = user.city_state 
-                ? `${user.city_name}, ${user.city_state}` 
+            user.agency_city_label = user.city_state
+                ? `${user.city_name}, ${user.city_state}`
                 : user.city_name;
         }
 
