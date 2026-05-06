@@ -344,7 +344,7 @@
                         ],
                         "body": {
                             "mode": "raw",
-                            "raw": "{\n  \"property_id\": 1,\n  \"full_name\": \"Jane Doe\",\n  \"email\": \"jane@example.com\",\n  \"phone\": \"1234567890\",\n  \"message\": \"I am interested in this property!\",\n  \"inquiry_type\": \"general\"\n}"
+                            "raw": "{\n  \"property_id\": 1,\n  \"first_name\": \"Jane\",\n  \"last_name\": \"Doe\",\n  \"email\": \"jane@example.com\",\n  \"phone\": \"1234567890\",\n  \"message\": \"I am interested in this property!\",\n  \"inquiry_type\": \"general\"\n}"
                         },
                         "url": {
                             "raw": "{{base_url}}/api/inquiries",
