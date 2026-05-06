@@ -66,3 +66,14 @@ exports.getPropertyTypes = async (req, res) => {
         res.status(500).json({ success: false, message: error.message });
     }
 };
+// Get All Communities
+exports.getAllCommunities = async (req, res) => {
+    try {
+        const communities = await db('communities')
+            .where({ status: 1 })
+            .orderBy('community_name', 'asc');
+        res.json({ success: true, communities });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};

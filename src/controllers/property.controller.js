@@ -13,7 +13,12 @@ const getProperties = async (req, res) => {
             search
         } = req.query;
 
-        const query = db('properties').where({ 'properties.status': 1 });
+        const query = db('properties');
+
+        // Only admins can see rejected/inactive properties (status 0)
+        if (!req.user || req.user.role !== 'admin') {
+            query.where({ 'properties.status': 1 });
+        }
 
         if (city_id) query.where({ 'properties.city_id': city_id });
         if (property_status) query.where({ 'properties.property_status': property_status });
@@ -105,7 +110,14 @@ const getProperties = async (req, res) => {
 // Get single property details
 const getPropertyById = async (req, res) => {
     try {
-        const property = await db('properties').where({ id: req.params.id, status: 1 }).first();
+        let query = db('properties').where({ id: req.params.id });
+
+        // Only admins can see rejected/inactive properties (status 0)
+        if (!req.user || req.user.role !== 'admin') {
+            query.where({ status: 1 });
+        }
+
+        const property = await query.first();
         if (!property) {
             return res.status(404).json({ success: false, message: 'Property not found' });
         }
@@ -258,19 +270,106 @@ const createProperty = async (req, res) => {
 const updateProperty = async (req, res) => {
     try {
         const { id } = req.params;
-        const property = await db('properties').where({ id, seller_id: req.user.id }).first();
+        let query = db('properties').where({ id });
+
+        // If not admin, restrict to own properties
+        if (req.user.role !== 'admin') {
+            query.where({ seller_id: req.user.id });
+        }
+
+        const property = await query.first();
 
         if (!property) {
             return res.status(404).json({ success: false, message: 'Property not found or unauthorized' });
         }
 
         const updates = { ...req.body };
-        delete updates.images;
-        delete updates.seller_id;
+        
+        // Map assigned_vendor_id to seller_id if present
+        if (updates.assigned_vendor_id && updates.assigned_vendor_id !== 'null') {
+            updates.seller_id = updates.assigned_vendor_id;
+        }
 
-        await db('properties').where({ id }).update(updates);
+        // Remove non-database fields
+        delete updates.images;
+        delete updates.assigned_vendor_id;
+        delete updates.keep_images;
+        delete updates['keep_images[]'];
+        
+        // Don't allow non-admins to change status during regular update
+        if (req.user.role !== 'admin') {
+            delete updates.status;
+            delete updates.seller_id; // Non-admins can't reassign
+        }
+
+        if (Object.keys(updates).length > 0) {
+            await db('properties').where({ id }).update(updates);
+        }
+
+        // Handle images
+        const keepImages = req.body['keep_images[]'] || req.body.keep_images || [];
+        let keepImagesArray = Array.isArray(keepImages) ? keepImages : [keepImages].filter(Boolean);
+
+        // Clean URLs: remove the base URL if present to match DB paths
+        keepImagesArray = keepImagesArray.map(url => {
+            if (url.includes('/uploads/')) {
+                return '/uploads/' + url.split('/uploads/')[1];
+            }
+            return url;
+        });
+
+        // Remove images that are no longer kept
+        await db('property_images')
+            .where({ property_id: id })
+            .whereNotIn('image_url', keepImagesArray)
+            .del();
+
+        // Add new images
+        if (req.files && req.files.length > 0) {
+            // Get current max sort order
+            const lastImage = await db('property_images')
+                .where({ property_id: id })
+                .orderBy('sort_order', 'desc')
+                .first();
+            
+            let currentSortOrder = lastImage ? lastImage.sort_order + 1 : 0;
+
+            const imagesToInsert = req.files.map((file, index) => ({
+                property_id: id,
+                image_url: `/uploads/properties/${file.filename}`,
+                sort_order: currentSortOrder + index
+            }));
+            await db('property_images').insert(imagesToInsert);
+        }
 
         res.json({ success: true, message: 'Property updated successfully' });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+// Update property status (Admin only)
+const updatePropertyStatus = async (req, res) => {
+    try {
+        if (req.user.role !== 'admin') {
+            return res.status(403).json({ success: false, message: 'Unauthorized. Admin access required.' });
+        }
+
+        const { id } = req.params;
+        const { status } = req.body; // 1 for Approve, 0 for Reject
+
+        if (status === undefined) {
+            return res.status(400).json({ success: false, message: 'Status is required (1 for Approve, 0 for Reject)' });
+        }
+
+        const property = await db('properties').where({ id }).first();
+        if (!property) {
+            return res.status(404).json({ success: false, message: 'Property not found' });
+        }
+
+        await db('properties').where({ id }).update({ status });
+
+        res.json({ success: true, message: `Property status updated to ${status === 1 ? 'Approved' : 'Rejected'}` });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
     }
@@ -280,7 +379,14 @@ const updateProperty = async (req, res) => {
 const deleteProperty = async (req, res) => {
     try {
         const { id } = req.params;
-        const property = await db('properties').where({ id, seller_id: req.user.id }).first();
+        let query = db('properties').where({ id });
+
+        // If not admin, restrict to own properties
+        if (req.user.role !== 'admin') {
+            query.where({ seller_id: req.user.id });
+        }
+
+        const property = await query.first();
 
         if (!property) {
             return res.status(404).json({ success: false, message: 'Property not found or unauthorized' });
@@ -300,5 +406,6 @@ module.exports = {
     getPropertyById,
     createProperty,
     updateProperty,
+    updatePropertyStatus,
     deleteProperty
 };
